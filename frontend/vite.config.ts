@@ -7,7 +7,11 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@teambudget/shared': path.resolve(__dirname, '../shared/src/index.ts'),
     },
+  },
+  optimizeDeps: {
+    include: ['@teambudget/shared'],
   },
   server: {
     port: 3000,
