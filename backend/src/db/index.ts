@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import path from 'path';
 import fs from 'fs';
 import { config } from '../config';
@@ -9,13 +9,77 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-export const db = new Database(config.database.path);
+let sqlDb: SqlJsDatabase;
+let dbPath: string;
 
-// Enable foreign keys
-db.pragma('foreign_keys = ON');
+// Helper to save database to file
+function saveDatabase() {
+  if (sqlDb && dbPath) {
+    const data = sqlDb.export();
+    const buffer = Buffer.from(data);
+    fs.writeFileSync(dbPath, buffer);
+  }
+}
 
-// Initialize database schema
-export function initializeDatabase(): void {
+// Database wrapper that mimics better-sqlite3 API
+const db = {
+  prepare(sql: string) {
+    return {
+      run(...params: unknown[]) {
+        sqlDb.run(sql, params as (string | number | null)[]);
+        saveDatabase();
+        return { changes: sqlDb.getRowsModified() };
+      },
+      get(...params: unknown[]) {
+        const stmt = sqlDb.prepare(sql);
+        stmt.bind(params as (string | number | null)[]);
+        if (stmt.step()) {
+          const row = stmt.getAsObject();
+          stmt.free();
+          return row;
+        }
+        stmt.free();
+        return undefined;
+      },
+      all(...params: unknown[]) {
+        const results: Record<string, unknown>[] = [];
+        const stmt = sqlDb.prepare(sql);
+        stmt.bind(params as (string | number | null)[]);
+        while (stmt.step()) {
+          results.push(stmt.getAsObject());
+        }
+        stmt.free();
+        return results;
+      },
+    };
+  },
+
+  exec(sql: string) {
+    sqlDb.exec(sql);
+    saveDatabase();
+  },
+
+  pragma(sql: string) {
+    sqlDb.exec(`PRAGMA ${sql}`);
+  },
+};
+
+export async function initializeDatabase(): Promise<void> {
+  const SQL = await initSqlJs();
+  dbPath = config.database.path;
+
+  // Load existing database or create new one
+  if (fs.existsSync(dbPath)) {
+    const fileBuffer = fs.readFileSync(dbPath);
+    sqlDb = new SQL.Database(fileBuffer);
+  } else {
+    sqlDb = new SQL.Database();
+  }
+
+  // Enable foreign keys
+  db.pragma('foreign_keys = ON');
+
+  // Initialize schema
   db.exec(`
     -- Users table
     CREATE TABLE IF NOT EXISTS users (

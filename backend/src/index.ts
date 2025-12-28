@@ -8,50 +8,51 @@ import { initializeDatabase } from './db';
 import routes from './routes';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
-// Initialize database
-initializeDatabase();
+async function startServer() {
+  // Initialize database (async for sql.js)
+  await initializeDatabase();
 
-const app = express();
+  const app = express();
 
-// Security middleware
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-}));
+  // Security middleware
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }));
 
-// CORS configuration
-app.use(
-  cors({
-    origin: config.cors.origin,
-    credentials: true,
-  })
-);
+  // CORS configuration
+  app.use(
+    cors({
+      origin: config.cors.origin,
+      credentials: true,
+    })
+  );
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: config.rateLimit.windowMs,
-  max: config.rateLimit.maxRequests,
-  message: { success: false, error: 'Too many requests, please try again later.' },
-});
-app.use('/api/', limiter);
+  // Rate limiting
+  const limiter = rateLimit({
+    windowMs: config.rateLimit.windowMs,
+    max: config.rateLimit.maxRequests,
+    message: { success: false, error: 'Too many requests, please try again later.' },
+  });
+  app.use('/api/', limiter);
 
-// Body parsing
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+  // Body parsing
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true }));
 
-// Serve uploaded files
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+  // Serve uploaded files
+  app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// API routes
-app.use('/api', routes);
+  // API routes
+  app.use('/api', routes);
 
-// Error handling
-app.use(notFoundHandler);
-app.use(errorHandler);
+  // Error handling
+  app.use(notFoundHandler);
+  app.use(errorHandler);
 
-// Start server
-const PORT = config.port;
-app.listen(PORT, () => {
-  console.log(`
+  // Start server
+  const PORT = config.port;
+  app.listen(PORT, () => {
+    console.log(`
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
 ║   🏆 TeamBudget API Server                                 ║
@@ -65,7 +66,13 @@ app.listen(PORT, () => {
 ║   - Teams:  http://localhost:${PORT}/api/teams                ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
-  `);
-});
+    `);
+  });
 
-export default app;
+  return app;
+}
+
+startServer().catch((error) => {
+  console.error('Failed to start server:', error);
+  process.exit(1);
+});
